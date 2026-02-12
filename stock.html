@@ -1,69 +1,113 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="fr">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Stock</title>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Stock Widget</title>
 
   <style>
     body {
       margin: 0;
-      font-family: Arial, sans-serif;
       background: transparent;
+      font-family: Arial, sans-serif;
+
+      display: flex;
+      justify-content: center;
+      align-items: center;
     }
 
-    .badge {
-      display: inline-block;
-      padding: 4px 10px;
+    .stock-label {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+
+      padding: 6px 14px;
       border-radius: 999px;
       font-size: 14px;
+      font-weight: 600;
+
       border: 1px solid #ddd;
       background: white;
+
+      gap: 8px;
       white-space: nowrap;
+    }
+
+    .dot {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      display: inline-block;
+    }
+
+    /* ✅ En stock */
+    .in-stock .dot {
+      background: #16a34a;
+      animation: blink 1.4s infinite;
+    }
+
+    /* ❌ Rupture */
+    .out-stock .dot {
+      background: #dc2626;
+      animation: blink 1.4s infinite;
+    }
+
+    /* Animation clignotement doux */
+    @keyframes blink {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.3; }
+    }
+
+    /* Mobile responsive */
+    @media (max-width: 480px) {
+      .stock-label {
+        font-size: 13px;
+        padding: 5px 12px;
+      }
+
+      .dot {
+        width: 10px;
+        height: 10px;
+      }
     }
   </style>
 </head>
 
 <body>
-  <span id="out" class="badge">Chargement…</span>
+
+  <div id="stock-status" class="stock-label">
+    Chargement...
+  </div>
 
   <script>
-    // ✅ Ton Google Sheet ID (ne change pas)
+    /* ✅ Ton Google Sheet */
     const SHEET_ID = "1ZzV0Lx-XrxKLek0JwPk57Pdydn7lk7_871ZFqhuk6H4";
+    const GID = "0"; // onglet STOCK
 
-    // Onglet STOCK → gid=0 (ne change pas)
-    const GID = "0";
-
-    // URL exemple : stock.html?sku=LOVE%20BLOND%20SALT
-    const params = new URLSearchParams(location.search);
+    /* SKU passé dans l’URL */
+    const params = new URLSearchParams(window.location.search);
     const sku = (params.get("sku") || "").trim();
 
-    const out = document.getElementById("out");
+    const stockStatus = document.getElementById("stock-status");
 
-    // Si aucun SKU n'est fourni
     if (!sku) {
-      out.textContent = "SKU manquant";
+      stockStatus.innerHTML = "SKU manquant";
       throw new Error("Missing SKU");
     }
 
-    // Sécurisation du SKU
+    /* Requête : colonne A = SKU, colonne C = Quantité */
     const safeSku = sku.replace(/'/g, "\\'");
-
-    // On lit Colonne A = SKU et Colonne C = Nombre
     const tq = encodeURIComponent(
       `select A,C where A='${safeSku}' limit 1`
     );
 
-    // URL de lecture Google Sheets
     const url =
       `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?` +
       `gid=${GID}&tqx=out:json&tq=${tq}`;
 
-    // Fetch des données
     fetch(url)
       .then(r => r.text())
       .then(txt => {
-        // Extraction JSON
         const jsonStr = txt.substring(
           txt.indexOf("{"),
           txt.lastIndexOf("}") + 1
@@ -72,23 +116,26 @@
         const json = JSON.parse(jsonStr);
         const rows = json.table?.rows || [];
 
-        // SKU non trouvé
         if (!rows.length) {
-          out.textContent = "SKU introuvable";
+          stockStatus.innerHTML = "SKU introuvable";
           return;
         }
 
-        // Quantité stock (colonne C)
         const qty = Number(rows[0].c?.[1]?.v ?? 0);
 
-        // Affichage final
-        out.textContent = qty > 0
-          ? "🟢 En stock"
-          : "🔴 Rupture";
+        /* ✅ Affichage uniquement En stock / Rupture */
+        if (qty > 0) {
+          stockStatus.className = "stock-label in-stock";
+          stockStatus.innerHTML = `<span class="dot"></span> En stock`;
+        } else {
+          stockStatus.className = "stock-label out-stock";
+          stockStatus.innerHTML = `<span class="dot"></span> Rupture`;
+        }
       })
       .catch(() => {
-        out.textContent = "Erreur stock";
+        stockStatus.innerHTML = "Erreur stock";
       });
   </script>
+
 </body>
 </html>
