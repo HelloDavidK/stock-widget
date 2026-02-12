@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Stock</title>
+
+  <style>
+    body {
+      margin: 0;
+      font-family: Arial, sans-serif;
+      background: transparent;
+    }
+
+    .badge {
+      display: inline-block;
+      padding: 4px 10px;
+      border-radius: 999px;
+      font-size: 14px;
+      border: 1px solid #ddd;
+      background: white;
+      white-space: nowrap;
+    }
+  </style>
+</head>
+
+<body>
+  <span id="out" class="badge">Chargement…</span>
+
+  <script>
+    // ✅ Ton Google Sheet ID (ne change pas)
+    const SHEET_ID = "1ZzV0Lx-XrxKLek0JwPk57Pdydn7lk7_871ZFqhuk6H4";
+
+    // Onglet STOCK → gid=0 (ne change pas)
+    const GID = "0";
+
+    // URL exemple : stock.html?sku=LOVE%20BLOND%20SALT
+    const params = new URLSearchParams(location.search);
+    const sku = (params.get("sku") || "").trim();
+
+    const out = document.getElementById("out");
+
+    // Si aucun SKU n'est fourni
+    if (!sku) {
+      out.textContent = "SKU manquant";
+      throw new Error("Missing SKU");
+    }
+
+    // Sécurisation du SKU
+    const safeSku = sku.replace(/'/g, "\\'");
+
+    // On lit Colonne A = SKU et Colonne C = Nombre
+    const tq = encodeURIComponent(
+      `select A,C where A='${safeSku}' limit 1`
+    );
+
+    // URL de lecture Google Sheets
+    const url =
+      `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?` +
+      `gid=${GID}&tqx=out:json&tq=${tq}`;
+
+    // Fetch des données
+    fetch(url)
+      .then(r => r.text())
+      .then(txt => {
+        // Extraction JSON
+        const jsonStr = txt.substring(
+          txt.indexOf("{"),
+          txt.lastIndexOf("}") + 1
+        );
+
+        const json = JSON.parse(jsonStr);
+        const rows = json.table?.rows || [];
+
+        // SKU non trouvé
+        if (!rows.length) {
+          out.textContent = "SKU introuvable";
+          return;
+        }
+
+        // Quantité stock (colonne C)
+        const qty = Number(rows[0].c?.[1]?.v ?? 0);
+
+        // Affichage final
+        out.textContent = qty > 0
+          ? "🟢 En stock"
+          : "🔴 Rupture";
+      })
+      .catch(() => {
+        out.textContent = "Erreur stock";
+      });
+  </script>
+</body>
+</html>
