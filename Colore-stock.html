@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Stock Couleur</title>
+
+  <style>
+    body{
+      margin:0;
+      background:transparent;
+      font-family:Arial,sans-serif;
+      display:flex;
+      justify-content:center;
+      align-items:center;
+    }
+
+    .wrap{
+      width:100%;
+      max-width:360px;
+      display:flex;
+      flex-direction:column;
+      align-items:center;
+      gap:10px;
+      padding:6px 0;
+    }
+
+    .label{
+      width:100%;
+      display:flex;
+      justify-content:center;
+      font-size:13px;
+      font-weight:600;
+    }
+
+    select{
+      width:min(340px, 92vw);
+      padding:9px 12px;
+      border-radius:12px;
+      border:1px solid #ddd;
+      background:#fff;
+      font-size:14px;
+      outline:none;
+    }
+
+    .badge{
+      display:inline-flex;
+      align-items:center;
+      justify-content:center;
+      gap:8px;
+      padding:6px 14px;
+      border-radius:999px;
+      font-size:14px;
+      font-weight:600;
+      border:1px solid #ddd;
+      background:#fff;
+      white-space:nowrap;
+    }
+
+    .dot{ width:12px;height:12px;border-radius:50%; display:inline-block; }
+
+    .in .dot{ background:#16a34a; animation:blink 1.4s infinite; }
+    .out .dot{ background:#dc2626; animation:blink 1.4s infinite; }
+
+    @keyframes blink{ 0%,100%{opacity:1} 50%{opacity:.3} }
+
+    @media (max-width:480px){
+      select{ font-size:13px; }
+      .badge{ font-size:13px; padding:5px 12px; }
+      .dot{ width:10px;height:10px; }
+    }
+  </style>
+</head>
+
+<body>
+  <div class="wrap">
+    <div class="label">Couleur</div>
+
+    <select id="colorSel" aria-label="Couleur">
+      <option>Chargement…</option>
+    </select>
+
+    <div id="badge" class="badge">Chargement…</div>
+  </div>
+
+<script>
+  // ✅ Paramètres Google Sheet
+  const SHEET_ID = "1ZzV0Lx-XrxKLek0JwPk57Pdydn7lk7_871ZFqhuk6H4";
+  const GID = "0"; // onglet STOCK
+
+  // ✅ SKU passé dans l'URL
+  const params = new URLSearchParams(location.search);
+  const sku = (params.get("sku") || "").trim();
+
+  const colorSel = document.getElementById("colorSel");
+  const badge = document.getElementById("badge");
+
+  function setBadge(inStock){
+    if(inStock){
+      badge.className = "badge in";
+      badge.innerHTML = `<span class="dot"></span> En stock`;
+    }else{
+      badge.className = "badge out";
+      badge.innerHTML = `<span class="dot"></span> Rupture`;
+    }
+  }
+
+  if(!sku){
+    colorSel.innerHTML = `<option>SKU manquant</option>`;
+    badge.textContent = "SKU manquant";
+    throw new Error("Missing SKU");
+  }
+
+  // ✅ On lit : A = SKU, D = Couleur, C = Quantité
+  // Requête gviz : select A, D, C where A='...'
+  const safeSku = sku.replace(/'/g, "\\'");
+  const tq = encodeURIComponent(`select A, D, C where A='${safeSku}'`);
+
+  const url = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?gid=${GID}&tqx=out:json&tq=${tq}`;
+
+  fetch(url)
+    .then(r => r.text())
+    .then(txt => {
+      const jsonStr = txt.substring(txt.indexOf("{"), txt.lastIndexOf("}") + 1);
+      const json = JSON.parse(jsonStr);
+      const rows = json.table?.rows || [];
+
+      if(!rows.length){
+        colorSel.innerHTML = `<option>SKU introuvable</option>`;
+        badge.textContent = "SKU introuvable";
+        return;
+      }
+
+      // Dans le résultat gviz:
+      // col[0] = A (SKU)
+      // col[1] = D (Couleur)
+      // col[2] = C (Qté)
+      const items = rows.map(r => ({
+        color: String(r.c?.[1]?.v ?? "").trim(),
+        qty: Number(r.c?.[2]?.v ?? 0)
+      })).filter(x => x.color);
+
+      if(!items.length){
+        colorSel.innerHTML = `<option>Aucune couleur</option>`;
+        badge.textContent = "Aucune couleur";
+        return;
+      }
+
+      // Remplir menu déroulant
+      colorSel.innerHTML = "";
+      items.forEach(it => {
+        const opt = document.createElement("option");
+        opt.value = it.color;
+        opt.textContent = it.color;          // ✅ on affiche juste la couleur
+        opt.dataset.qty = String(it.qty);    // qty gardée en interne
+        colorSel.appendChild(opt);
+      });
+
+      // Choisir la première couleur par défaut
+      colorSel.value = items[0].color;
+      setBadge(items[0].qty > 0);
+
+      // Changement de couleur => mise à jour stock
+      colorSel.addEventListener("change", () => {
+        const opt = colorSel.selectedOptions[0];
+        const qty = Number(opt.dataset.qty || 0);
+        setBadge(qty > 0);
+      });
+    })
+    .catch(() => {
+      colorSel.innerHTML = `<option>Erreur</option>`;
+      badge.textContent = "Erreur stock";
+    });
+</script>
+</body>
+</html>
