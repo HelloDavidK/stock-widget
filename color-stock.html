@@ -2,143 +2,175 @@
 <html lang="fr">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Couleur</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Couleur + Stock</title>
   <style>
-    body{margin:0;font-family:Arial,system-ui,-apple-system,Segoe UI,Roboto;}
-    .wrap{max-width:520px;margin:0 auto;padding:14px 12px;text-align:center;}
-    .label{font-weight:700;margin:6px 0 10px;}
+    :root { --ok:#16a34a; --bad:#dc2626; --muted:#9ca3af; }
+    body { margin:0; font-family: Arial, sans-serif; }
+    .wrap{
+      max-width: 520px;
+      margin: 0 auto;
+      padding: 14px 14px 18px;
+      text-align:center;
+    }
+    h3{ margin: 6px 0 10px; font-size:18px; font-weight:700; }
     select{
-      width:100%; max-width:420px;
-      padding:14px 14px;
-      border:1px solid #ddd; border-radius:14px;
-      font-size:16px; background:#fff;
+      width:100%;
+      padding: 14px 14px;
+      border:1px solid #e5e7eb;
+      border-radius: 14px;
+      font-size:16px;
+      background:#fff;
       outline:none;
     }
     .badge{
-      display:inline-flex; align-items:center; gap:10px;
-      padding:10px 16px; border:1px solid #eee; border-radius:999px;
-      margin-top:12px; font-weight:600;
+      display:inline-flex;
+      align-items:center;
+      gap:10px;
+      margin-top:12px;
+      padding:10px 14px;
+      border-radius: 999px;
+      border:1px solid #e5e7eb;
+      background:#fff;
+      font-size:16px;
       justify-content:center;
     }
     .dot{
-      width:12px;height:12px;border-radius:50%;
-      box-shadow:0 0 0 3px rgba(0,0,0,.04);
+      width:14px; height:14px;
+      border-radius:999px;
+      background: var(--muted);
+      box-shadow: 0 0 0 3px rgba(156,163,175,.15);
     }
-    .imgBox{margin-top:14px; display:flex; justify-content:center;}
-    .imgBox img{
-      width:100%; max-width:420px;
-      height:auto; border-radius:16px;
-      border:1px solid #f0f0f0;
+    .dot.ok{ background: var(--ok); box-shadow: 0 0 0 3px rgba(22,163,74,.18); }
+    .dot.bad{ background: var(--bad); box-shadow: 0 0 0 3px rgba(220,38,38,.18); }
+
+    /* Optionnel: clignotement du voyant */
+    .blink { animation: blink 1s infinite; }
+    @keyframes blink { 0%,50%{opacity:1} 51%,100%{opacity:.35} }
+
+    .imgbox{
+      margin: 14px auto 0;
+      width: 100%;
+      max-width: 520px;
     }
-    .muted{color:#666;font-size:14px;margin-top:10px;}
+    .imgbox img{
+      width:100%;
+      height:auto;
+      display:none;
+      border-radius: 14px;
+      border:1px solid #f1f5f9;
+    }
+    .err{
+      margin-top:12px;
+      color:#b91c1c;
+      font-size:14px;
+      line-height:1.35;
+      display:none;
+      word-break:break-word;
+    }
   </style>
 </head>
 <body>
   <div class="wrap">
-    <div class="label">Couleur</div>
+    <h3>Couleur</h3>
+
     <select id="colorSelect" disabled>
-      <option>Chargement...</option>
+      <option>Chargement…</option>
     </select>
 
-    <div id="badge" class="badge" style="display:none;">
-      <span id="dot" class="dot"></span>
-      <span id="txt"></span>
+    <div class="badge" id="badge">
+      <span class="dot" id="dot"></span>
+      <span id="label">Chargement…</span>
     </div>
 
-    <div class="imgBox" id="imgBox" style="display:none;">
-      <img id="variantImg" alt="Visuel couleur">
+    <!-- Image affichée DANS le widget -->
+    <div class="imgbox">
+      <img id="variantImg" alt="Photo couleur" />
     </div>
 
-    <div id="hint" class="muted"></div>
+    <div class="err" id="err"></div>
   </div>
 
-  <script>
-    const qs = new URLSearchParams(location.search);
-    const sku = (qs.get("sku") || "").trim();
-    const select = document.getElementById("colorSelect");
-    const badge = document.getElementById("badge");
-    const dot = document.getElementById("dot");
-    const txt = document.getElementById("txt");
-    const hint = document.getElementById("hint");
-    const imgBox = document.getElementById("imgBox");
-    const variantImg = document.getElementById("variantImg");
+<script>
+(async () => {
+  // ⚠️ Mets ici l’URL de TON GitHub Pages (base)
+  const BASE = "https://hellodavidk.github.io/stock-widget/";
 
-    if(!sku){
-      select.innerHTML = <option>SKU manquant</option>;
-      hint.textContent = Ajoute ?sku=TONSKU à l’URL.;
-      throw new Error("SKU manquant");
+  const qs = new URLSearchParams(location.search);
+  const sku = (qs.get("sku") || "").trim();
+
+  const select = document.getElementById("colorSelect");
+  const dot = document.getElementById("dot");
+  const label = document.getElementById("label");
+  const img = document.getElementById("variantImg");
+  const err = document.getElementById("err");
+
+  function showError(msg){
+    err.style.display = "block";
+    err.textContent = msg;
+    select.innerHTML = <option>SKU manquant</option>;
+    select.disabled = true;
+    label.textContent = "SKU manquant";
+    dot.className = "dot bad";
+    img.style.display = "none";
+  }
+
+  if (!sku) return showError("Paramètre manquant : ?sku=TONSKU");
+
+  try{
+    // ✅ URL ABSOLUE + anti-cache
+    const url = BASE + "stock.json?v=" + Date.now();
+    const res = await fetch(url, { cache: "no-store" });
+    if(!res.ok) throw new Error("Impossible de charger stock.json (" + res.status + ")");
+
+    const data = await res.json();
+    const variants = data[sku];
+
+    if(!variants || !Array.isArray(variants) || variants.length === 0){
+      return showError("SKU introuvable dans stock.json : " + sku);
     }
 
-    // Base URL GitHub Pages (pour transformer "images/xxx.png" en URL complète)
-    const base = location.origin + location.pathname.replace(/\/[^\/]*$/, "/");
-
-    function setStock(qty){
-      badge.style.display = "inline-flex";
-      if(Number(qty) > 0){
-        dot.style.background = "#16a34a"; // vert
-        txt.textContent = "En stock";
-      } else {
-        dot.style.background = "#dc2626"; // rouge
-        txt.textContent = "Rupture";
-      }
-    }
-
-    function setImage(path){
-      if(!path) { imgBox.style.display="none"; return; }
-      imgBox.style.display = "flex";
-      // si path est relatif (images/...), on le convertit en URL complète
-      const url = path.startsWith("http") ? path : (base + path);
-      variantImg.src = url;
-    }
-
-    function normalizeColorKey(s){
-      return (s||"").trim().toLowerCase();
-    }
-
-    async function main(){
-      // cache-buster léger (optionnel) pour voir les modifs vite
-      const res = await fetch("stock.json?v=" + Date.now(), {cache:"no-store"});
-      if(!res.ok) throw new Error("Impossible de charger stock.json");
-      const data = await res.json();
-
-      const variants = data[sku];
-      if(!variants || !variants.length){
-        select.innerHTML = <option>SKU introuvable : ${sku}</option>;
-        select.disabled = true;
-        hint.textContent = "Vérifie que le SKU existe dans stock.json.";
-        return;
-      }
-
-      // Remplir dropdown
-      select.disabled = false;
-      select.innerHTML = variants
-        .map(v => <option value="${String(v.color).replace(/"/g,'&quot;')}">${v.color}</option>)
-        .join("");
-
-      // Pré-sélection : 1ère couleur en stock si possible, sinon la 1ère
-      let pick = variants.find(v => Number(v.qty) > 0) || variants[0];
-      select.value = pick.color;
-
-      // Appliquer UI
-      setStock(pick.qty);
-      setImage(pick.img);
-      hint.textContent = ""; // ok
-
-      select.addEventListener("change", () => {
-        const chosen = select.value;
-        const v = variants.find(x => normalizeColorKey(x.color) === normalizeColorKey(chosen)) || variants[0];
-        setStock(v.qty);
-        setImage(v.img);
-      });
-    }
-
-    main().catch(err => {
-      select.innerHTML = <option>Erreur de chargement</option>;
-      select.disabled = true;
-      hint.textContent = "Erreur: " + err.message;
-      console.error(err);
+    // Remplit le menu
+    select.innerHTML = "";
+    variants.forEach((v, i) => {
+      const opt = document.createElement("option");
+      opt.value = String(i);
+      opt.textContent = v.color || ("Couleur " + (i+1));
+      select.appendChild(opt);
     });
-  </script>
+
+    select.disabled = false;
+
+    // Affiche un variant
+    function render(i){
+      const v = variants[i];
+      const inStock = Number(v.qty) > 0;
+
+      label.textContent = inStock ? "En stock" : "Rupture";
+      dot.className = "dot " + (inStock ? "ok" : "bad") + " blink"; // retire "blink" si tu ne veux pas clignoter
+
+      // Image
+      if (v.img){
+        const src = v.img.startsWith("http") ? v.img : (BASE + v.img.replace(/^\/+/,''));
+        img.src = src;
+        img.style.display = "block";
+      } else {
+        img.style.display = "none";
+      }
+    }
+
+    // initial
+    render(0);
+
+    // change
+    select.addEventListener("change", () => {
+      render(Number(select.value || 0));
+    });
+
+  }catch(e){
+    showError("Erreur : " + (e && e.message ? e.message : e));
+  }
+})();
+</script>
 </body>
 </html>
