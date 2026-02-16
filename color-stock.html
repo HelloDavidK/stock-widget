@@ -3,71 +3,84 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Stock Couleur</title>
+  <title>Couleur + Stock</title>
 
   <style>
+    :root { --maxw: 340px; }
+
     body{
       margin:0;
-      background:transparent;
-      font-family:Arial,sans-serif;
-      display:flex;
-      justify-content:center;
-      align-items:center;
+      padding:16px 12px;
+      font-family: Arial, sans-serif;
+      background:#fff;
+      color:#111;
     }
 
     .wrap{
-      width:100%;
-      max-width:360px;
-      display:flex;
-      flex-direction:column;
-      align-items:center;
-      gap:10px;
-      padding:6px 0;
+      max-width: var(--maxw);
+      margin:0 auto;
+      text-align:center;
     }
 
     .label{
-      width:100%;
-      display:flex;
-      justify-content:center;
-      font-size:13px;
-      font-weight:600;
+      font-weight:700;
+      margin:0 0 10px 0;
     }
 
     select{
-      width:min(340px, 92vw);
-      padding:9px 12px;
-      border-radius:12px;
+      width:100%;
+      max-width: var(--maxw);
+      padding:12px 14px;
+      font-size:16px;
       border:1px solid #ddd;
-      background:#fff;
-      font-size:14px;
+      border-radius:14px;
       outline:none;
+      background:#fff;
     }
 
     .badge{
       display:inline-flex;
       align-items:center;
-      justify-content:center;
-      gap:8px;
-      padding:6px 14px;
+      gap:10px;
+      padding:10px 18px;
       border-radius:999px;
+      font-weight:700;
       font-size:14px;
-      font-weight:600;
-      border:1px solid #ddd;
+      border:1px solid #e6e6e6;
+      margin:14px auto 0 auto;
+      justify-content:center;
       background:#fff;
-      white-space:nowrap;
     }
 
-    .dot{ width:12px;height:12px;border-radius:50%; display:inline-block; }
+    .dot{
+      width:12px;
+      height:12px;
+      border-radius:50%;
+    }
 
-    .in .dot{ background:#16a34a; animation:blink 1.4s infinite; }
-    .out .dot{ background:#dc2626; animation:blink 1.4s infinite; }
+    .in{ background:#f0fff0; }
+    .in .dot{ background:#16a34a; }
 
-    @keyframes blink{ 0%,100%{opacity:1} 50%{opacity:.3} }
+    .out{ background:#fff0f0; }
+    .out .dot{ background:#dc2626; }
 
-    @media (max-width:480px){
-      select{ font-size:13px; }
-      .badge{ font-size:13px; padding:5px 12px; }
-      .dot{ width:10px;height:10px; }
+    .imgbox{
+      margin-top:14px;
+      display:flex;
+      justify-content:center;
+    }
+    .imgbox img{
+      width:100%;
+      max-width:280px;
+      height:auto;
+      border-radius:14px;
+      box-shadow:0 4px 14px rgba(0,0,0,.12);
+    }
+
+    .hint{
+      margin-top:10px;
+      font-size:13px;
+      color:#666;
     }
   </style>
 </head>
@@ -76,101 +89,140 @@
   <div class="wrap">
     <div class="label">Couleur</div>
 
-    <select id="colorSel" aria-label="Couleur">
+    <select id="colorSelect">
       <option>Chargement…</option>
     </select>
 
-    <div id="badge" class="badge">Chargement…</div>
+    <div id="stockBadge"></div>
+    <div class="imgbox" id="imageBox"></div>
+
+    <div class="hint" id="hint"></div>
   </div>
 
 <script>
-  // ✅ Paramètres Google Sheet
-  const SHEET_ID = "1ZzV0Lx-XrxKLek0JwPk57Pdydn7lk7_871ZFqhuk6H4";
-  const GID = "0"; // onglet STOCK
+  // ✅ Ton lien CSV
+  const CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vS2Jr9OyZIhYyaMImhx-IvAqC7EU5B-bhrTPhWdFCqWIF_MHbB-xOCJSEj2w83HFv4tbgRURV98kFht/pub?gid=0&single=true&output=csv";
 
-  // ✅ SKU passé dans l'URL
+  // Colonnes (index 0 = colonne A)
+  const COL_SKU   = 0; // A
+  const COL_QTY   = 2; // C
+  const COL_COLOR = 3; // D
+  const COL_IMG   = 4; // E
+
   const params = new URLSearchParams(location.search);
-  const sku = (params.get("sku") || "").trim();
+  const skuParam = (params.get("sku") || "").trim();
 
-  const colorSel = document.getElementById("colorSel");
-  const badge = document.getElementById("badge");
+  const select   = document.getElementById("colorSelect");
+  const badgeEl  = document.getElementById("stockBadge");
+  const imageBox = document.getElementById("imageBox");
+  const hintEl   = document.getElementById("hint");
 
-  function setBadge(inStock){
-    if(inStock){
-      badge.className = "badge in";
-      badge.innerHTML = `<span class="dot"></span> En stock`;
-    }else{
-      badge.className = "badge out";
-      badge.innerHTML = `<span class="dot"></span> Rupture`;
+  // Petit parseur CSV (gère les virgules + guillemets)
+  function parseCSV(text){
+    const rows = [];
+    let row = [], field = "", inQuotes = false;
+
+    for (let i=0; i<text.length; i++){
+      const c = text[i];
+      const next = text[i+1];
+
+      if (c === '"' && inQuotes && next === '"'){ field += '"'; i++; continue; }
+      if (c === '"'){ inQuotes = !inQuotes; continue; }
+
+      if (!inQuotes && (c === ",")){
+        row.push(field); field = ""; continue;
+      }
+
+      if (!inQuotes && (c === "\n")){
+        row.push(field); rows.push(row);
+        row = []; field = ""; continue;
+      }
+
+      if (c !== "\r") field += c;
     }
+    if (field.length || row.length){ row.push(field); rows.push(row); }
+    return rows;
   }
 
-  if(!sku){
-    colorSel.innerHTML = `<option>SKU manquant</option>`;
-    badge.textContent = "SKU manquant";
-    throw new Error("Missing SKU");
+  function setBadge(qty){
+    const isIn = qty > 0;
+    badgeEl.innerHTML = `
+      <div class="badge ${isIn ? "in" : "out"}">
+        <span class="dot"></span>
+        ${isIn ? "En stock" : "Rupture"}
+      </div>
+    `;
   }
 
-  // ✅ On lit : A = SKU, D = Couleur, C = Quantité
-  // Requête gviz : select A, D, C where A='...'
-  const safeSku = sku.replace(/'/g, "\\'");
-  const tq = encodeURIComponent(`select A, D, C where A='${safeSku}'`);
+  function setImage(url){
+    const clean = (url || "").trim();
+    if (!clean){
+      imageBox.innerHTML = "";
+      return;
+    }
+    imageBox.innerHTML = <img src="${clean}" alt="Image produit">;
+  }
 
-  const url = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?gid=${GID}&tqx=out:json&tq=${tq}`;
+  async function init(){
+    if (!skuParam){
+      select.innerHTML = <option>SKU manquant</option>;
+      hintEl.textContent = "Ajoute ?sku=TONSKU à la fin de l’URL.";
+      return;
+    }
 
-  fetch(url)
-    .then(r => r.text())
-    .then(txt => {
-      const jsonStr = txt.substring(txt.indexOf("{"), txt.lastIndexOf("}") + 1);
-      const json = JSON.parse(jsonStr);
-      const rows = json.table?.rows || [];
+    const res = await fetch(CSV_URL, { cache: "no-store" });
+    const text = await res.text();
+    const table = parseCSV(text);
 
-      if(!rows.length){
-        colorSel.innerHTML = `<option>SKU introuvable</option>`;
-        badge.textContent = "SKU introuvable";
-        return;
-      }
+    // On enlève la 1ère ligne si c'est un header
+    const data = table.slice(1);
 
-      // Dans le résultat gviz:
-      // col[0] = A (SKU)
-      // col[1] = D (Couleur)
-      // col[2] = C (Qté)
-      const items = rows.map(r => ({
-        color: String(r.c?.[1]?.v ?? "").trim(),
-        qty: Number(r.c?.[2]?.v ?? 0)
-      })).filter(x => x.color);
+    // Filtre SKU (insensible à la casse)
+    const skuUpper = skuParam.toUpperCase();
+    const matches = data.filter(r => (r[COL_SKU] || "").trim().toUpperCase() === skuUpper);
 
-      if(!items.length){
-        colorSel.innerHTML = `<option>Aucune couleur</option>`;
-        badge.textContent = "Aucune couleur";
-        return;
-      }
+    if (!matches.length){
+      select.innerHTML = <option>Aucune couleur trouvée</option>;
+      hintEl.textContent = SKU introuvable : ${skuParam};
+      badgeEl.innerHTML = "";
+      imageBox.innerHTML = "";
+      return;
+    }
 
-      // Remplir menu déroulant
-      colorSel.innerHTML = "";
-      items.forEach(it => {
-        const opt = document.createElement("option");
-        opt.value = it.color;
-        opt.textContent = it.color;          // ✅ on affiche juste la couleur
-        opt.dataset.qty = String(it.qty);    // qty gardée en interne
-        colorSel.appendChild(opt);
-      });
-
-      // Choisir la première couleur par défaut
-      colorSel.value = items[0].color;
-      setBadge(items[0].qty > 0);
-
-      // Changement de couleur => mise à jour stock
-      colorSel.addEventListener("change", () => {
-        const opt = colorSel.selectedOptions[0];
-        const qty = Number(opt.dataset.qty || 0);
-        setBadge(qty > 0);
-      });
-    })
-    .catch(() => {
-      colorSel.innerHTML = `<option>Erreur</option>`;
-      badge.textContent = "Erreur stock";
+    // Remplit le menu couleurs
+    select.innerHTML = "";
+    matches.forEach((r, idx) => {
+      const color = (r[COL_COLOR] || "").trim() || Couleur ${idx+1};
+      const opt = document.createElement("option");
+      opt.value = String(idx);
+      opt.textContent = color;
+      select.appendChild(opt);
     });
+
+    // Affiche par défaut la première ligne
+    const show = (idx) => {
+      const r = matches[idx];
+      const qty = parseInt((r[COL_QTY] || "0").trim(), 10) || 0;
+      const img = (r[COL_IMG] || "").trim();
+      setBadge(qty);
+      setImage(img);
+    };
+
+    show(0);
+
+    select.addEventListener("change", () => {
+      const idx = parseInt(select.value, 10) || 0;
+      show(idx);
+    });
+
+    hintEl.textContent = ""; // ok
+  }
+
+  init().catch(err => {
+    select.innerHTML = <option>Erreur</option>;
+    hintEl.textContent = "Impossible de charger le stock (CSV).";
+    console.error(err);
+  });
 </script>
 </body>
 </html>
