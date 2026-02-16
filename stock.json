@@ -1,0 +1,19 @@
+{
+  "KITFORCE": [
+    {
+      "color": "Carbon Black",
+      "qty": 1,
+      "img": "images/KITFORCE-Carbonblack.png"
+    },
+    {
+      "color": "Chameleon Prism",
+      "qty": 0,
+      "img": "images/KITFORCE-chameleonprism.png"
+    },
+    {
+      "color": "Iris Purple",
+      "qty": 1,
+      "img": "images/KITFORCE-IRISPURPLE.png"
+    }
+  ]
+}
