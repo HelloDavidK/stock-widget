@@ -2,227 +2,143 @@
 <html lang="fr">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Couleur + Stock</title>
-
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Couleur</title>
   <style>
-    :root { --maxw: 340px; }
-
-    body{
-      margin:0;
-      padding:16px 12px;
-      font-family: Arial, sans-serif;
-      background:#fff;
-      color:#111;
-    }
-
-    .wrap{
-      max-width: var(--maxw);
-      margin:0 auto;
-      text-align:center;
-    }
-
-    .label{
-      font-weight:700;
-      margin:0 0 10px 0;
-    }
-
+    body{margin:0;font-family:Arial,system-ui,-apple-system,Segoe UI,Roboto;}
+    .wrap{max-width:520px;margin:0 auto;padding:14px 12px;text-align:center;}
+    .label{font-weight:700;margin:6px 0 10px;}
     select{
-      width:100%;
-      max-width: var(--maxw);
-      padding:12px 14px;
-      font-size:16px;
-      border:1px solid #ddd;
-      border-radius:14px;
+      width:100%; max-width:420px;
+      padding:14px 14px;
+      border:1px solid #ddd; border-radius:14px;
+      font-size:16px; background:#fff;
       outline:none;
-      background:#fff;
     }
-
     .badge{
-      display:inline-flex;
-      align-items:center;
-      gap:10px;
-      padding:10px 18px;
-      border-radius:999px;
-      font-weight:700;
-      font-size:14px;
-      border:1px solid #e6e6e6;
-      margin:14px auto 0 auto;
+      display:inline-flex; align-items:center; gap:10px;
+      padding:10px 16px; border:1px solid #eee; border-radius:999px;
+      margin-top:12px; font-weight:600;
       justify-content:center;
-      background:#fff;
     }
-
     .dot{
-      width:12px;
-      height:12px;
-      border-radius:50%;
+      width:12px;height:12px;border-radius:50%;
+      box-shadow:0 0 0 3px rgba(0,0,0,.04);
     }
-
-    .in{ background:#f0fff0; }
-    .in .dot{ background:#16a34a; }
-
-    .out{ background:#fff0f0; }
-    .out .dot{ background:#dc2626; }
-
-    .imgbox{
-      margin-top:14px;
-      display:flex;
-      justify-content:center;
+    .imgBox{margin-top:14px; display:flex; justify-content:center;}
+    .imgBox img{
+      width:100%; max-width:420px;
+      height:auto; border-radius:16px;
+      border:1px solid #f0f0f0;
     }
-    .imgbox img{
-      width:100%;
-      max-width:280px;
-      height:auto;
-      border-radius:14px;
-      box-shadow:0 4px 14px rgba(0,0,0,.12);
-    }
-
-    .hint{
-      margin-top:10px;
-      font-size:13px;
-      color:#666;
-    }
+    .muted{color:#666;font-size:14px;margin-top:10px;}
   </style>
 </head>
-
 <body>
   <div class="wrap">
     <div class="label">Couleur</div>
-
-    <select id="colorSelect">
-      <option>Chargement…</option>
+    <select id="colorSelect" disabled>
+      <option>Chargement...</option>
     </select>
 
-    <div id="stockBadge"></div>
-    <div class="imgbox" id="imageBox"></div>
+    <div id="badge" class="badge" style="display:none;">
+      <span id="dot" class="dot"></span>
+      <span id="txt"></span>
+    </div>
 
-    <div class="hint" id="hint"></div>
+    <div class="imgBox" id="imgBox" style="display:none;">
+      <img id="variantImg" alt="Visuel couleur">
+    </div>
+
+    <div id="hint" class="muted"></div>
   </div>
 
-<script>
-  // ✅ Ton lien CSV
-  const CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vS2Jr9OyZIhYyaMImhx-IvAqC7EU5B-bhrTPhWdFCqWIF_MHbB-xOCJSEj2w83HFv4tbgRURV98kFht/pub?gid=0&single=true&output=csv";
+  <script>
+    const qs = new URLSearchParams(location.search);
+    const sku = (qs.get("sku") || "").trim();
+    const select = document.getElementById("colorSelect");
+    const badge = document.getElementById("badge");
+    const dot = document.getElementById("dot");
+    const txt = document.getElementById("txt");
+    const hint = document.getElementById("hint");
+    const imgBox = document.getElementById("imgBox");
+    const variantImg = document.getElementById("variantImg");
 
-  // Colonnes (index 0 = colonne A)
-  const COL_SKU   = 0; // A
-  const COL_QTY   = 2; // C
-  const COL_COLOR = 3; // D
-  const COL_IMG   = 4; // E
-
-  const params = new URLSearchParams(location.search);
-  const skuParam = (params.get("sku") || "").trim();
-
-  const select   = document.getElementById("colorSelect");
-  const badgeEl  = document.getElementById("stockBadge");
-  const imageBox = document.getElementById("imageBox");
-  const hintEl   = document.getElementById("hint");
-
-  // Petit parseur CSV (gère les virgules + guillemets)
-  function parseCSV(text){
-    const rows = [];
-    let row = [], field = "", inQuotes = false;
-
-    for (let i=0; i<text.length; i++){
-      const c = text[i];
-      const next = text[i+1];
-
-      if (c === '"' && inQuotes && next === '"'){ field += '"'; i++; continue; }
-      if (c === '"'){ inQuotes = !inQuotes; continue; }
-
-      if (!inQuotes && (c === ",")){
-        row.push(field); field = ""; continue;
-      }
-
-      if (!inQuotes && (c === "\n")){
-        row.push(field); rows.push(row);
-        row = []; field = ""; continue;
-      }
-
-      if (c !== "\r") field += c;
-    }
-    if (field.length || row.length){ row.push(field); rows.push(row); }
-    return rows;
-  }
-
-  function setBadge(qty){
-    const isIn = qty > 0;
-    badgeEl.innerHTML = `
-      <div class="badge ${isIn ? "in" : "out"}">
-        <span class="dot"></span>
-        ${isIn ? "En stock" : "Rupture"}
-      </div>
-    `;
-  }
-
-  function setImage(url){
-    const clean = (url || "").trim();
-    if (!clean){
-      imageBox.innerHTML = "";
-      return;
-    }
-    imageBox.innerHTML = <img src="${clean}" alt="Image produit">;
-  }
-
-  async function init(){
-    if (!skuParam){
+    if(!sku){
       select.innerHTML = <option>SKU manquant</option>;
-      hintEl.textContent = "Ajoute ?sku=TONSKU à la fin de l’URL.";
-      return;
+      hint.textContent = Ajoute ?sku=TONSKU à l’URL.;
+      throw new Error("SKU manquant");
     }
 
-    const res = await fetch(CSV_URL, { cache: "no-store" });
-    const text = await res.text();
-    const table = parseCSV(text);
+    // Base URL GitHub Pages (pour transformer "images/xxx.png" en URL complète)
+    const base = location.origin + location.pathname.replace(/\/[^\/]*$/, "/");
 
-    // On enlève la 1ère ligne si c'est un header
-    const data = table.slice(1);
-
-    // Filtre SKU (insensible à la casse)
-    const skuUpper = skuParam.toUpperCase();
-    const matches = data.filter(r => (r[COL_SKU] || "").trim().toUpperCase() === skuUpper);
-
-    if (!matches.length){
-      select.innerHTML = <option>Aucune couleur trouvée</option>;
-      hintEl.textContent = SKU introuvable : ${skuParam};
-      badgeEl.innerHTML = "";
-      imageBox.innerHTML = "";
-      return;
+    function setStock(qty){
+      badge.style.display = "inline-flex";
+      if(Number(qty) > 0){
+        dot.style.background = "#16a34a"; // vert
+        txt.textContent = "En stock";
+      } else {
+        dot.style.background = "#dc2626"; // rouge
+        txt.textContent = "Rupture";
+      }
     }
 
-    // Remplit le menu couleurs
-    select.innerHTML = "";
-    matches.forEach((r, idx) => {
-      const color = (r[COL_COLOR] || "").trim() || Couleur ${idx+1};
-      const opt = document.createElement("option");
-      opt.value = String(idx);
-      opt.textContent = color;
-      select.appendChild(opt);
+    function setImage(path){
+      if(!path) { imgBox.style.display="none"; return; }
+      imgBox.style.display = "flex";
+      // si path est relatif (images/...), on le convertit en URL complète
+      const url = path.startsWith("http") ? path : (base + path);
+      variantImg.src = url;
+    }
+
+    function normalizeColorKey(s){
+      return (s||"").trim().toLowerCase();
+    }
+
+    async function main(){
+      // cache-buster léger (optionnel) pour voir les modifs vite
+      const res = await fetch("stock.json?v=" + Date.now(), {cache:"no-store"});
+      if(!res.ok) throw new Error("Impossible de charger stock.json");
+      const data = await res.json();
+
+      const variants = data[sku];
+      if(!variants || !variants.length){
+        select.innerHTML = <option>SKU introuvable : ${sku}</option>;
+        select.disabled = true;
+        hint.textContent = "Vérifie que le SKU existe dans stock.json.";
+        return;
+      }
+
+      // Remplir dropdown
+      select.disabled = false;
+      select.innerHTML = variants
+        .map(v => <option value="${String(v.color).replace(/"/g,'&quot;')}">${v.color}</option>)
+        .join("");
+
+      // Pré-sélection : 1ère couleur en stock si possible, sinon la 1ère
+      let pick = variants.find(v => Number(v.qty) > 0) || variants[0];
+      select.value = pick.color;
+
+      // Appliquer UI
+      setStock(pick.qty);
+      setImage(pick.img);
+      hint.textContent = ""; // ok
+
+      select.addEventListener("change", () => {
+        const chosen = select.value;
+        const v = variants.find(x => normalizeColorKey(x.color) === normalizeColorKey(chosen)) || variants[0];
+        setStock(v.qty);
+        setImage(v.img);
+      });
+    }
+
+    main().catch(err => {
+      select.innerHTML = <option>Erreur de chargement</option>;
+      select.disabled = true;
+      hint.textContent = "Erreur: " + err.message;
+      console.error(err);
     });
-
-    // Affiche par défaut la première ligne
-    const show = (idx) => {
-      const r = matches[idx];
-      const qty = parseInt((r[COL_QTY] || "0").trim(), 10) || 0;
-      const img = (r[COL_IMG] || "").trim();
-      setBadge(qty);
-      setImage(img);
-    };
-
-    show(0);
-
-    select.addEventListener("change", () => {
-      const idx = parseInt(select.value, 10) || 0;
-      show(idx);
-    });
-
-    hintEl.textContent = ""; // ok
-  }
-
-  init().catch(err => {
-    select.innerHTML = <option>Erreur</option>;
-    hintEl.textContent = "Impossible de charger le stock (CSV).";
-    console.error(err);
-  });
-</script>
+  </script>
 </body>
 </html>
