@@ -94,7 +94,7 @@
 <script>
 (async () => {
   // ⚠️ Mets ici l’URL de TON GitHub Pages (base)
-  const BASE = "https://hellodavidk.github.io/stock-widget/";
+  const BASE = new URL("./", window.location.href).href;
 
   const qs = new URLSearchParams(location.search);
   const sku = (qs.get("sku") || "").trim();
@@ -119,7 +119,7 @@
 
   try{
     // ✅ URL ABSOLUE + anti-cache
-    const url = BASE + "stock.json?v=" + Date.now();
+    const url = new URL("stock.json?v=" + Date.now(), BASE).href;
     const res = await fetch(url, { cache: "no-store" });
     if(!res.ok) throw new Error("Impossible de charger stock.json (" + res.status + ")");
 
