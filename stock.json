@@ -294,11 +294,11 @@
   " ": 80,
   "TULUMNOX": 0,
   "XIBAANOX": 0,
-  "OXONOX": 0,
+  "OXONOX": 1,
   "CHILANNOX": 0,
   "KOBANOX": 1,
   "CALINOX": 0,
   "YAXAANOX": 0,
   "NAHUNOX": 0,
-  "UXULNOX": 0
+  "UXULNOX": 1
 }
