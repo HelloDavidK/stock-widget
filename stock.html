@@ -36,6 +36,11 @@
       display: inline-block;
     }
 
+    .loading .dot {
+      background: #f59e0b;
+      animation: blink 1.2s infinite;
+    }
+
     .in-stock .dot {
       background: #16a34a;
       animation: blink 1.4s infinite;
@@ -44,6 +49,10 @@
     .out-stock .dot {
       background: #dc2626;
       animation: blink 1.4s infinite;
+    }
+
+    .error .dot {
+      background: #6b7280;
     }
 
     @keyframes blink {
@@ -66,48 +75,125 @@
 </head>
 
 <body>
-
-  <div id="stock-status" class="stock-label">
-    Chargement...
+  <div id="stock-status" class="stock-label loading">
+    <span class="dot"></span> Vérification...
   </div>
 
   <script>
-    /* URL du fichier JSON sur GitHub Pages */
     const JSON_URL = "https://hellodavidk.github.io/stock-widget/stock.json";
+    const CACHE_KEY = "stock_widget_cache_v1";
+    const CACHE_TIME_KEY = "stock_widget_cache_time_v1";
 
-    /* SKU passé dans l’URL */
+    // Durée du cache local : 5 minutes
+    const CACHE_TTL = 5 * 60 * 1000;
+
     const params = new URLSearchParams(window.location.search);
     const sku = (params.get("sku") || "").trim();
-
     const stockStatus = document.getElementById("stock-status");
 
-    if (!sku) {
-      stockStatus.innerHTML = "SKU manquant";
-      throw new Error("Missing SKU");
+    function setStatus(type, text) {
+      stockStatus.className = `stock-label ${type}`;
+      stockStatus.innerHTML = `<span class="dot"></span> ${text}`;
     }
 
-    fetch(JSON_URL)
-      .then(res => res.json())
-      .then(data => {
-        if (!(sku in data)) {
-          stockStatus.innerHTML = "SKU introuvable";
-          return;
-        }
+    function renderStock(data) {
+      if (!sku) {
+        setStatus("error", "SKU manquant");
+        return false;
+      }
 
-        const qty = Number(data[sku] ?? 0);
+      if (!data || typeof data !== "object") {
+        return false;
+      }
 
-        if (qty > 0) {
-          stockStatus.className = "stock-label in-stock";
-          stockStatus.innerHTML = `<span class="dot"></span> En stock`;
-        } else {
-          stockStatus.className = "stock-label out-stock";
-          stockStatus.innerHTML = `<span class="dot"></span> Rupture`;
-        }
-      })
-      .catch(() => {
-        stockStatus.innerHTML = "Erreur stock";
+      if (!(sku in data)) {
+        setStatus("error", "SKU introuvable");
+        return true;
+      }
+
+      const qty = Number(data[sku] ?? 0);
+
+      if (qty > 0) {
+        setStatus("in-stock", "En stock");
+      } else {
+        setStatus("out-stock", "Rupture");
+      }
+
+      return true;
+    }
+
+    function getCachedData() {
+      try {
+        const raw = localStorage.getItem(CACHE_KEY);
+        const time = Number(localStorage.getItem(CACHE_TIME_KEY) || 0);
+
+        if (!raw || !time) return null;
+
+        const isExpired = (Date.now() - time) > CACHE_TTL;
+        const data = JSON.parse(raw);
+
+        return { data, isExpired };
+      } catch {
+        return null;
+      }
+    }
+
+    function saveCache(data) {
+      try {
+        localStorage.setItem(CACHE_KEY, JSON.stringify(data));
+        localStorage.setItem(CACHE_TIME_KEY, String(Date.now()));
+      } catch {
+        // Ignore si localStorage indisponible
+      }
+    }
+
+    async function fetchFreshData() {
+      // petit cache-buster léger pour éviter un cache trop agressif
+      const version = Math.floor(Date.now() / 60000); // change chaque minute
+      const response = await fetch(`${JSON_URL}?v=${version}`, {
+        cache: "no-store"
       });
-  </script>
 
+      if (!response.ok) {
+        throw new Error("Impossible de charger le stock");
+      }
+
+      return await response.json();
+    }
+
+    async function loadStock() {
+      if (!sku) {
+        setStatus("error", "SKU manquant");
+        return;
+      }
+
+      const cached = getCachedData();
+      let renderedFromCache = false;
+
+      // 1. Affichage immédiat depuis le cache si disponible
+      if (cached && cached.data) {
+        renderedFromCache = renderStock(cached.data);
+      }
+
+      // 2. Si pas de cache, on garde le loader
+      if (!renderedFromCache) {
+        setStatus("loading", "Vérification...");
+      }
+
+      // 3. Mise à jour en arrière-plan
+      try {
+        const freshData = await fetchFreshData();
+        saveCache(freshData);
+        renderStock(freshData);
+      } catch {
+        // Si rien n’a été affiché depuis le cache, on montre l’erreur
+        if (!renderedFromCache) {
+          setStatus("error", "Erreur stock");
+        }
+      }
+    }
+
+    loadStock();
+  </script>
 </body>
 </html>
