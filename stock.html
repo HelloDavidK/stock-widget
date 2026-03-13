@@ -10,7 +10,6 @@
       margin: 0;
       background: transparent;
       font-family: Arial, sans-serif;
-
       display: flex;
       justify-content: center;
       align-items: center;
@@ -20,15 +19,12 @@
       display: inline-flex;
       align-items: center;
       justify-content: center;
-
       padding: 6px 14px;
       border-radius: 999px;
       font-size: 14px;
       font-weight: 600;
-
       border: 1px solid #ddd;
       background: white;
-
       gap: 8px;
       white-space: nowrap;
     }
@@ -40,25 +36,21 @@
       display: inline-block;
     }
 
-    /* ✅ En stock */
     .in-stock .dot {
       background: #16a34a;
       animation: blink 1.4s infinite;
     }
 
-    /* ❌ Rupture */
     .out-stock .dot {
       background: #dc2626;
       animation: blink 1.4s infinite;
     }
 
-    /* Animation clignotement doux */
     @keyframes blink {
       0%, 100% { opacity: 1; }
       50% { opacity: 0.3; }
     }
 
-    /* Mobile responsive */
     @media (max-width: 480px) {
       .stock-label {
         font-size: 13px;
@@ -80,9 +72,8 @@
   </div>
 
   <script>
-    /* ✅ Ton Google Sheet */
-    const SHEET_ID = "1ZzV0Lx-XrxKLek0JwPk57Pdydn7lk7_871ZFqhuk6H4";
-    const GID = "0"; // onglet STOCK
+    /* URL du fichier JSON sur GitHub Pages */
+    const JSON_URL = "https://hellodavidk.github.io/stock-widget/stock.json";
 
     /* SKU passé dans l’URL */
     const params = new URLSearchParams(window.location.search);
@@ -95,35 +86,16 @@
       throw new Error("Missing SKU");
     }
 
-    /* Requête : colonne A = SKU, colonne C = Quantité */
-    const safeSku = sku.replace(/'/g, "\\'");
-    const tq = encodeURIComponent(
-      `select A,C where A='${safeSku}' limit 1`
-    );
-
-    const url =
-      `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?` +
-      `gid=${GID}&tqx=out:json&tq=${tq}`;
-
-    fetch(url)
-      .then(r => r.text())
-      .then(txt => {
-        const jsonStr = txt.substring(
-          txt.indexOf("{"),
-          txt.lastIndexOf("}") + 1
-        );
-
-        const json = JSON.parse(jsonStr);
-        const rows = json.table?.rows || [];
-
-        if (!rows.length) {
+    fetch(JSON_URL)
+      .then(res => res.json())
+      .then(data => {
+        if (!(sku in data)) {
           stockStatus.innerHTML = "SKU introuvable";
           return;
         }
 
-        const qty = Number(rows[0].c?.[1]?.v ?? 0);
+        const qty = Number(data[sku] ?? 0);
 
-        /* ✅ Affichage uniquement En stock / Rupture */
         if (qty > 0) {
           stockStatus.className = "stock-label in-stock";
           stockStatus.innerHTML = `<span class="dot"></span> En stock`;
